@@ -33,12 +33,22 @@
 # LICENSE to the repo root and an `install -Dm644 LICENSE ...` line here
 # once one exists.
 
-pkgname=argus
+# NOTE: the package is named `argus-tracker`, NOT `argus`. The bare name
+# `argus` is already taken on AUR by an unrelated project (a "guardian
+# system") and by the classic argus network-flow monitor (`argus-bin`).
+# Sharing the name made AUR helpers try to "upgrade" this app to those
+# unrelated packages. The installed command is still `argus`.
+pkgname=argus-tracker
 pkgver=0.2.0
 pkgrel=1
 pkgdesc="Always-on personal desktop activity tracker (KDE Plasma / Wayland)"
 arch=('x86_64')
-url="https://github.com/example/argus"  # placeholder — not yet published
+url="https://github.com/Adarsh077/argus"
+# Supersede any previously locally-built `argus` package and claim the
+# `argus` command so the two can't be co-installed.
+provides=('argus')
+conflicts=('argus')
+replaces=('argus')
 # license=('...')  # intentionally omitted, see note above: no LICENSE file yet
 depends=(
   'python'
