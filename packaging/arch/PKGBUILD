@@ -39,7 +39,7 @@
 # Sharing the name made AUR helpers try to "upgrade" this app to those
 # unrelated packages. The installed command is still `argus`.
 pkgname=argus-tracker
-pkgver=0.2.1
+pkgver=0.3.0
 pkgrel=1
 pkgdesc="Always-on personal desktop activity tracker (KDE Plasma / Wayland)"
 arch=('x86_64')

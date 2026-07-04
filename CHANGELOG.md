@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.3.0 (2026-07-04)
+
+### Features
+
+- **packaging**: Publish to AUR on release + auto-enable user service
+  ([`b41df87`](https://github.com/Adarsh077/argus/commit/b41df875cfd64309c576533af79ec9df15b5a5af))
+
+
 ## v0.2.1 (2026-07-04)
 
 ### Bug Fixes
