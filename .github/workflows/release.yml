@@ -1,0 +1,76 @@
+name: Build & Release (Arch package)
+
+# Build the CachyOS/Arch package on every push to main and publish it as a
+# GitHub Release with the .pkg.tar.zst attached.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write  # needed to create releases + tags
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+    steps:
+      - name: Install build tooling
+        # base-devel already provides makepkg/sudo/fakeroot; add what the
+        # PKGBUILD's build() needs (uv, rsync) plus git for checkout and the
+        # venv/system-site deps the package links against at build time.
+        run: |
+          pacman -Syu --noconfirm --needed \
+            git uv rsync python python-gobject gstreamer gst-plugin-pipewire
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build package
+        # makepkg refuses to run as root, so build as an unprivileged user.
+        # --nodeps: skip installing runtime deps (kdotool is AUR-only and
+        # isn't needed to *build* the package, only to run it).
+        run: |
+          useradd -m builder
+          # git 2.35+ refuses "dubious ownership" of a dir owned by another user
+          git config --system --add safe.directory "$GITHUB_WORKSPACE"
+          chown -R builder "$GITHUB_WORKSPACE"
+          sudo -u builder bash -c '
+            set -euo pipefail
+            cd "'"$GITHUB_WORKSPACE"'/packaging/arch"
+            makepkg -f --nodeps --noconfirm
+          '
+
+      - name: Locate artifact
+        id: pkg
+        run: |
+          f=$(ls "$GITHUB_WORKSPACE"/packaging/arch/*.pkg.tar.zst | head -1)
+          echo "path=$f" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$f")" >> "$GITHUB_OUTPUT"
+          # pkgver from the PKGBUILD, for the release title.
+          ver=$(sudo -u builder bash -c 'cd "'"$GITHUB_WORKSPACE"'/packaging/arch"; source PKGBUILD; echo "$pkgver-$pkgrel"')
+          echo "ver=$ver" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          # Unique tag per build so successive main commits don't collide on
+          # the same pkgver. Marked as the latest release.
+          tag_name: build-${{ github.run_number }}-${{ github.sha }}
+          name: Argus ${{ steps.pkg.outputs.ver }} (build ${{ github.run_number }})
+          body: |
+            Automated build from commit ${{ github.sha }}.
+
+            Install on CachyOS/Arch:
+            ```
+            sudo pacman -U ${{ steps.pkg.outputs.name }}
+            ```
+            Runtime deps (installed by pacman from the package's `depends`,
+            except `kdotool` which comes from the AUR — `paru -S kdotool`).
+          files: ${{ steps.pkg.outputs.path }}
+          make_latest: true
