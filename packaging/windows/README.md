@@ -22,10 +22,16 @@ tested artifact.
 2. Build the onedir bundle from the repo root:
 
    ```powershell
-   uv run pyinstaller packaging\windows\argus.spec
+   uv run pyinstaller packaging\windows\argus.spec `
+     --distpath packaging\windows\dist --workpath packaging\windows\build
    ```
 
-   Output lands at `packaging\windows\dist\argus\` (an *onedir* build —
+   The `--distpath`/`--workpath` flags are required: without them
+   PyInstaller writes `dist\` relative to your current directory (the repo
+   root), but `argus.iss`'s `Source: "dist\argus\*"` is resolved relative
+   to the `.iss` file, i.e. `packaging\windows\dist\argus` — so ISCC would
+   not find the bundle. With the flags, output lands at
+   `packaging\windows\dist\argus\` (an *onedir* build —
    see the spec file's top-of-file comment for why onedir was chosen over
    onefile: onefile's per-launch extraction-to-temp is slow and fragile
    for an app bundling many small Jinja2 template files, and a poor fit

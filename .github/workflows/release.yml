@@ -1,7 +1,7 @@
-name: Build & Release (Arch package)
+name: Build & Release (Arch package + Windows installer)
 
-# Build the CachyOS/Arch package on every push to main and publish it as a
-# GitHub Release with the .pkg.tar.zst attached.
+# Build the CachyOS/Arch package AND the Windows installer on every push to
+# main and publish both to a GitHub Release (.pkg.tar.zst + argus-setup.exe).
 on:
   push:
     branches: [main]
@@ -72,5 +72,61 @@ jobs:
             ```
             Runtime deps (installed by pacman from the package's `depends`,
             except `kdotool` which comes from the AUR — `paru -S kdotool`).
+
+            Windows: download `argus-setup-*.exe` below and run it (per-user
+            install, no admin needed; registers Argus to start at logon).
           files: ${{ steps.pkg.outputs.path }}
+          make_latest: true
+
+  build-windows:
+    # Native Windows runner — a Windows .exe CANNOT be cross-compiled from
+    # Linux, so PyInstaller must run here. Runs independently of the Arch
+    # job and attaches its installer to the same release tag.
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Sync deps + add PyInstaller
+        # PyInstaller is a build-only tool, deliberately not a pyproject
+        # dependency — install it into the synced venv here.
+        run: |
+          uv sync
+          uv pip install pyinstaller
+
+      - name: Build onedir bundle
+        # --distpath/--workpath pin the output to packaging\windows\dist so
+        # it matches the `Source: "dist\argus\*"` path in argus.iss (Inno
+        # resolves that relative to the .iss file's directory). Without this,
+        # PyInstaller would write dist\ to the repo root and ISCC would fail
+        # to find the bundle.
+        run: >
+          uv run pyinstaller packaging\windows\argus.spec
+          --noconfirm
+          --distpath packaging\windows\dist
+          --workpath packaging\windows\build
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Compile installer
+        run: >
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          packaging\windows\argus.iss
+
+      - name: Locate installer
+        id: win
+        shell: pwsh
+        run: |
+          $f = Get-ChildItem packaging\windows\Output\argus-setup-*.exe | Select-Object -First 1
+          echo "path=$($f.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Publish to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}-${{ github.sha }}
+          files: ${{ steps.win.outputs.path }}
           make_latest: true
