@@ -1,35 +1,75 @@
-name: Build & Release (Arch package + Windows installer)
+name: Release
 
-# Build the CachyOS/Arch package AND the Windows installer on every push to
-# main and publish both to a GitHub Release (.pkg.tar.zst + argus-setup.exe).
+# Semantic-release pipeline. On every push to main:
+#   1. `release` runs python-semantic-release: it reads the Conventional Commit
+#      messages since the last v* tag, decides the next SemVer, stamps it into
+#      pyproject.toml / PKGBUILD / .SRCINFO, regenerates CHANGELOG.md, commits,
+#      tags v{version}, and creates the GitHub Release. If no commit warrants a
+#      release, it does nothing and the build jobs are skipped.
+#   2. `linux-build` / `windows-build` run ONLY when a release was cut. They
+#      check out the freshly created tag, build the Arch package and the
+#      Windows installer, and upload them as assets on that release.
 on:
   push:
     branches: [main]
   workflow_dispatch: {}
 
+# Least privilege by default; jobs opt up to write where they need it.
 permissions:
-  contents: write  # needed to create releases + tags
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  linux-build:
+  release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the release commit + tag, create the GitHub Release
+    outputs:
+      released: ${{ steps.release.outputs.released }}
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history + all tags so PSR can find the last release and parse
+          # every commit since it.
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+
+      - name: Python Semantic Release
+        id: release
+        uses: python-semantic-release/python-semantic-release@v10.6.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          git_committer_name: "github-actions"
+          git_committer_email: "actions@users.noreply.github.com"
+
+  linux-build:
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # upload the .pkg.tar.zst asset to the release
     container:
       image: archlinux:base-devel
     steps:
       - name: Install build tooling
         # base-devel already provides makepkg/sudo/fakeroot; add what the
-        # PKGBUILD's build() needs (uv, rsync) plus git for checkout and the
-        # venv/system-site deps the package links against at build time.
+        # PKGBUILD's build() needs (uv, rsync), git for checkout, github-cli
+        # to upload the asset, and the system-site deps the package links
+        # against at build time.
         run: |
           pacman -Syu --noconfirm --needed \
-            git uv rsync python python-gobject gstreamer gst-plugin-pipewire
+            git uv rsync python python-gobject gstreamer gst-plugin-pipewire github-cli
 
-      - name: Checkout
+      - name: Checkout release tag
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.tag }}
 
       - name: Build package
         # makepkg refuses to run as root, so build as an unprivileged user.
@@ -46,46 +86,27 @@ jobs:
             makepkg -f --nodeps --noconfirm
           '
 
-      - name: Locate artifact
-        id: pkg
+      - name: Upload package to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           f=$(ls "$GITHUB_WORKSPACE"/packaging/arch/*.pkg.tar.zst | head -1)
-          echo "path=$f" >> "$GITHUB_OUTPUT"
-          echo "name=$(basename "$f")" >> "$GITHUB_OUTPUT"
-          # pkgver from the PKGBUILD, for the release title.
-          ver=$(sudo -u builder bash -c 'cd "'"$GITHUB_WORKSPACE"'/packaging/arch"; source PKGBUILD; echo "$pkgver-$pkgrel"')
-          echo "ver=$ver" >> "$GITHUB_OUTPUT"
-
-      - name: Publish release
-        uses: softprops/action-gh-release@v2
-        with:
-          # Unique tag per build so successive main commits don't collide on
-          # the same pkgver. Marked as the latest release.
-          tag_name: build-${{ github.run_number }}-${{ github.sha }}
-          name: Argus ${{ steps.pkg.outputs.ver }}
-          body: |
-            Automated build from commit ${{ github.sha }}.
-
-            Install on CachyOS/Arch:
-            ```
-            sudo pacman -U ${{ steps.pkg.outputs.name }}
-            ```
-            Runtime deps (installed by pacman from the package's `depends`,
-            except `kdotool` which comes from the AUR — `paru -S kdotool`).
-
-            Windows: download `argus-setup-*.exe` below and run it (per-user
-            install, no admin needed; registers Argus to start at logon).
-          files: ${{ steps.pkg.outputs.path }}
-          make_latest: true
+          gh release upload "${{ needs.release.outputs.tag }}" "$f" --clobber
 
   windows-build:
+    needs: release
+    if: needs.release.outputs.released == 'true'
     # Native Windows runner — a Windows .exe CANNOT be cross-compiled from
-    # Linux, so PyInstaller must run here. Runs independently of the Arch
-    # job and attaches its installer to the same release tag.
+    # Linux, so PyInstaller must run here.
     runs-on: windows-latest
+    permissions:
+      contents: write # upload the installer asset to the release
     steps:
-      - name: Checkout
+      - name: Checkout release tag
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.tag }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -98,11 +119,9 @@ jobs:
           uv pip install pyinstaller
 
       - name: Build onedir bundle
-        # --distpath/--workpath pin the output to packaging\windows\dist so
-        # it matches the `Source: "dist\argus\*"` path in argus.iss (Inno
-        # resolves that relative to the .iss file's directory). Without this,
-        # PyInstaller would write dist\ to the repo root and ISCC would fail
-        # to find the bundle.
+        # --distpath/--workpath pin the output to packaging\windows\dist so it
+        # matches the `Source: "dist\argus\*"` path in argus.iss (Inno resolves
+        # that relative to the .iss file's directory).
         run: >
           uv run pyinstaller packaging\windows\argus.spec
           --noconfirm
@@ -113,20 +132,18 @@ jobs:
         run: choco install innosetup --no-progress -y
 
       - name: Compile installer
+        # Inject the release version so OutputBaseFilename and the installer's
+        # AppVersion match the git tag (see the #ifndef guard in argus.iss).
         run: >
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          /DMyAppVersion=${{ needs.release.outputs.version }}
           packaging\windows\argus.iss
 
-      - name: Locate installer
-        id: win
+      - name: Upload installer to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         shell: pwsh
         run: |
           $f = Get-ChildItem packaging\windows\Output\argus-setup-*.exe | Select-Object -First 1
-          echo "path=$($f.FullName)" >> $env:GITHUB_OUTPUT
-
-      - name: Publish to release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: build-${{ github.run_number }}-${{ github.sha }}
-          files: ${{ steps.win.outputs.path }}
-          make_latest: true
+          gh release upload "${{ needs.release.outputs.tag }}" $f.FullName --clobber

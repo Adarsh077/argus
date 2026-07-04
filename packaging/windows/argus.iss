@@ -8,7 +8,13 @@
 ; deps/data). This script packages that directory as-is.
 
 #define MyAppName "Argus"
-#define MyAppVersion "0.1.0"
+; Version is injected by CI as `ISCC /DMyAppVersion=X.Y.Z` (the value comes
+; from the git tag python-semantic-release created — see release.yml). The
+; #ifndef fallback keeps a manual `ISCC argus.iss` build working locally
+; without needing to pass /D.
+#ifndef MyAppVersion
+  #define MyAppVersion "0.0.0-dev"
+#endif
 #define MyAppPublisher "Argus"
 #define MyAppExeName "Argus.exe"
 

@@ -32,3 +32,38 @@ build-backend = "hatchling.build"
 
 [tool.hatchling.build.targets.wheel]
 packages = ["src/argus"]
+
+# ---------------------------------------------------------------------------
+# Release automation (python-semantic-release v10).
+#
+# Versioning is driven entirely by Conventional Commit messages on `main`:
+#   fix:      -> patch  (0.1.0 -> 0.1.1)
+#   feat:     -> minor  (0.1.0 -> 0.2.0)
+#   feat!: / "BREAKING CHANGE:" footer -> major, but see allow_zero_version.
+# Types like ci/docs/chore/refactor/test do NOT trigger a release on their own.
+# PSR stamps the new version into every file listed below, regenerates
+# CHANGELOG.md, commits, tags v{version}, and cuts the GitHub Release. The
+# distributable artifacts (Arch package, Windows installer) are built and
+# attached in separate CI jobs — see .github/workflows/release.yml.
+# ---------------------------------------------------------------------------
+[tool.semantic_release]
+tag_format = "v{version}"
+# Keep 0.x semantics: a breaking change bumps the minor (0.1 -> 0.2), not to
+# 1.0.0. Flip this to false (and land a `feat!:`) when we're ready to cut 1.0.
+allow_zero_version = true
+commit_parser = "conventional"
+# No build here: artifacts are produced by the linux-build / windows-build CI
+# jobs against the tag PSR creates, not during the version step.
+build_command = ""
+# The single source of truth for the package version.
+version_toml = ["pyproject.toml:project.version"]
+# Downstream packaging files that embed the same version and must move in
+# lockstep. argus.iss is handled differently (CI passes /DMyAppVersion) because
+# its `#define` syntax isn't a plain `name = value` assignment.
+version_variables = [
+    "packaging/arch/PKGBUILD:pkgver",
+    "packaging/arch/.SRCINFO:pkgver",
+]
+
+[tool.semantic_release.branches.main]
+match = "main"
