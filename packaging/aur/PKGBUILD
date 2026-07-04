@@ -17,7 +17,7 @@
 # On each upstream release, CI regenerates the sha256 + .SRCINFO and pushes
 # this file to the AUR (see .github/workflows/release.yml, publish-aur job).
 pkgname=argus-tracker
-pkgver=0.3.0
+pkgver=0.4.0
 pkgrel=1
 pkgdesc="Always-on personal desktop activity tracker (KDE Plasma / Wayland)"
 arch=('x86_64')

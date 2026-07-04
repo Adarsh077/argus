@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v0.4.0 (2026-07-04)
+
+### Bug Fixes
+
+- **dashboard**: Drop link underlines, underline on hover only
+  ([`ef18172`](https://github.com/Adarsh077/argus/commit/ef18172a0836b7012a164c9ff780b594b89c6ff2))
+
+### Chores
+
+- **dashboard**: Update vendored video.js 8.23.3 -> 8.23.9
+  ([`f49de5a`](https://github.com/Adarsh077/argus/commit/f49de5a925da2fbe93c8619de7db48381caa3f69))
+
+### Features
+
+- **dashboard**: Migrate recordings player to Video.js v10 beta
+  ([`f4a7037`](https://github.com/Adarsh077/argus/commit/f4a70372a5ffabbe363c88c55ce15f943ded5ff3))
+
+
 ## v0.3.0 (2026-07-04)
 
 ### Features
