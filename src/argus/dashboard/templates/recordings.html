@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Argus — Recordings{% endblock %}
+{% block content %}
+<link href="/static/vendor/video-js.min.css" rel="stylesheet">
+<h1>Recordings</h1>
+<p class="muted">{{ recordings|length }} recording(s)</p>
+
+<div class="rec-list">
+  {% for r in recordings %}
+  <div class="card">
+    <div class="rec-meta">
+      <strong>{{ r.local_time }}</strong>
+      <span class="muted">· {{ r.duration }} · {{ r.monitors or "?" }}</span>
+      <a class="muted" href="/recording?path={{ r.path }}" download>download</a>
+    </div>
+    <video
+      class="video-js vjs-default-skin rec-player"
+      controls
+      preload="none"
+      width="640"
+      height="360"
+      data-setup="{}">
+      <source src="/recording?path={{ r.path }}" type="video/mp4">
+    </video>
+  </div>
+  {% else %}
+  <p class="muted">No recordings yet. Use “Record” in the header (or the tray) to start one.</p>
+  {% endfor %}
+</div>
+
+<script src="/static/vendor/video.min.js"></script>
+<script>
+  // video.js auto-initializes elements with class "video-js" + data-setup.
+  document.querySelectorAll('video.video-js').forEach(function (el) {
+    if (window.videojs) window.videojs(el);
+  });
+</script>
+<style>
+  .rec-meta { display: flex; gap: 0.6rem; align-items: baseline; flex-wrap: wrap; margin-bottom: 0.6rem; }
+  .rec-player { max-width: 100%; }
+</style>
+{% endblock %}

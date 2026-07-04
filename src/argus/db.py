@@ -47,13 +47,23 @@ CREATE TABLE IF NOT EXISTS reports (
     UNIQUE (type, period_key)
 );
 
+CREATE TABLE IF NOT EXISTS recordings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,           -- recording START, UTC ISO-8601 (also the retention cutoff key)
+    ts_end TEXT,               -- recording END, UTC ISO-8601 (null only if a crash left it unfinalized)
+    path TEXT NOT NULL,
+    monitors TEXT,
+    duration_seconds REAL
+);
+
 CREATE INDEX IF NOT EXISTS idx_window_events_ts ON window_events (ts);
 CREATE INDEX IF NOT EXISTS idx_screenshots_ts ON screenshots (ts);
 CREATE INDEX IF NOT EXISTS idx_camera_frames_ts ON camera_frames (ts);
 CREATE INDEX IF NOT EXISTS idx_reports_type_period ON reports (type, period_key);
+CREATE INDEX IF NOT EXISTS idx_recordings_ts ON recordings (ts);
 """
 
-TABLES = ("window_events", "screenshots", "camera_frames", "reports")
+TABLES = ("window_events", "screenshots", "camera_frames", "reports", "recordings")
 
 
 def utc_now_iso() -> str:
@@ -110,6 +120,45 @@ class Database:
                 (ts, path, device),
             )
             return cur.lastrowid
+
+    def insert_recording(
+        self,
+        path: str,
+        monitors: str,
+        ts_start: str,
+        ts_end: str,
+        duration_seconds: float,
+    ) -> int:
+        """Record a finished screen recording. Inserted once, on stop, after
+        the mp4 is finalized on disk (so a row always points at a playable
+        file)."""
+        with self.cursor() as cur:
+            cur.execute(
+                "INSERT INTO recordings (ts, ts_end, path, monitors, duration_seconds) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (ts_start, ts_end, path, monitors, duration_seconds),
+            )
+            return cur.lastrowid
+
+    def list_recordings_between(self, start_utc_iso: str, end_utc_iso: str) -> list[sqlite3.Row]:
+        """Read-only: recordings whose start ts is in [start, end), newest
+        first. Used by the dashboard recordings page."""
+        with self.cursor() as cur:
+            cur.execute(
+                "SELECT id, ts, ts_end, path, monitors, duration_seconds FROM recordings "
+                "WHERE ts >= ? AND ts < ? ORDER BY ts DESC",
+                (start_utc_iso, end_utc_iso),
+            )
+            return cur.fetchall()
+
+    def list_recordings(self) -> list[sqlite3.Row]:
+        """Read-only: all recordings, newest first."""
+        with self.cursor() as cur:
+            cur.execute(
+                "SELECT id, ts, ts_end, path, monitors, duration_seconds FROM recordings "
+                "ORDER BY ts DESC"
+            )
+            return cur.fetchall()
 
     def upsert_report(
         self,

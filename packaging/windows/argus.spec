@@ -44,6 +44,13 @@ a = Analysis(
             os.path.join(_src, "argus", "dashboard", "templates"),
             os.path.join("argus", "dashboard", "templates"),
         ),
+        # Vendored static assets (video.js) for the recordings player —
+        # served locally so the offline frozen build has no CDN dependency.
+        # STATIC_DIR in app.py resolves this under sys._MEIPASS when frozen.
+        (
+            os.path.join(_src, "argus", "dashboard", "static"),
+            os.path.join("argus", "dashboard", "static"),
+        ),
     ],
     hiddenimports=[
         # uvicorn/fastapi/starlette pull in some backends dynamically

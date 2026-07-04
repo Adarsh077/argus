@@ -37,6 +37,7 @@ from pathlib import Path
 import markdown as markdown_lib
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -61,8 +62,10 @@ logger = logging.getLogger("argus.dashboard")
 # for normal `pip`/`uv` installs and editable/dev runs.
 if getattr(sys, "_MEIPASS", None):
     TEMPLATES_DIR = Path(sys._MEIPASS) / "argus" / "dashboard" / "templates"
+    STATIC_DIR = Path(sys._MEIPASS) / "argus" / "dashboard" / "static"
 else:
     TEMPLATES_DIR = Path(__file__).parent / "templates"
+    STATIC_DIR = Path(__file__).parent / "static"
 
 
 def _fmt_duration(seconds: float) -> str:
@@ -90,12 +93,18 @@ def create_app(config: Config | None = None) -> FastAPI:
     config = config or load_config()
     db = Database(config.db_path)
     images_root = config.images_dir.resolve()
+    recordings_root = config.recordings_dir.resolve()
 
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
     app = FastAPI(title="Argus Dashboard")
     app.state.config = config
     app.state.db = db
+
+    # Vendored static assets (video.js) served locally — no CDN, works on
+    # the offline frozen build. Mounted only if the directory exists.
+    if STATIC_DIR.is_dir():
+        app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     # -- helpers --------------------------------------------------------
 
@@ -119,6 +128,21 @@ def create_app(config: Config | None = None) -> FastAPI:
         if not candidate.is_file():
             return None
 
+        return candidate
+
+    def _safe_recording_path(raw_path: str) -> Path | None:
+        """Path-traversal-guarded resolve of a recording file under the
+        recordings root. Same defense as _safe_image_path. 404 on any miss."""
+        try:
+            candidate = Path(raw_path).resolve()
+        except (OSError, ValueError):
+            return None
+        try:
+            candidate.relative_to(recordings_root)
+        except ValueError:
+            return None
+        if not candidate.is_file():
+            return None
         return candidate
 
     def _captures_for_day(day: date, capture_type: str) -> list[dict]:
@@ -236,6 +260,34 @@ def create_app(config: Config | None = None) -> FastAPI:
             raise StarletteHTTPException(status_code=404)
         return FileResponse(safe_path, media_type="image/webp")
 
+    @app.get("/recordings", response_class=HTMLResponse)
+    def recordings_page(request: Request):
+        rows = db.list_recordings()
+        items = []
+        for row in rows:
+            _id, ts_iso, ts_end_iso, path, monitors, duration = row
+            ts = datetime.fromisoformat(ts_iso)
+            items.append(
+                {
+                    "local_time": _fmt_local(ts),
+                    "path": path,
+                    "monitors": monitors,
+                    "duration": _fmt_duration(duration) if duration else "—",
+                }
+            )
+        return templates.TemplateResponse(
+            request, "recordings.html", {"recordings": items}
+        )
+
+    @app.get("/recording")
+    def recording(path: str):
+        # FileResponse honours Range requests (starlette), so the <video>
+        # player can seek. Path-traversal guarded to the recordings root.
+        safe_path = _safe_recording_path(path)
+        if safe_path is None:
+            raise StarletteHTTPException(status_code=404)
+        return FileResponse(safe_path, media_type="video/mp4")
+
     @app.get("/reports", response_class=HTMLResponse)
     def reports_list(request: Request):
         rows = db.list_reports()
@@ -306,6 +358,24 @@ def create_app(config: Config | None = None) -> FastAPI:
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=503)
         return JSONResponse({"ok": True, "paused": False})
 
+    @app.post("/control/start_recording")
+    def control_start_recording():
+        # start_recording blocks on the daemon until the pipeline is PLAYING
+        # (or fails all-or-nothing); allow a generous client timeout.
+        try:
+            data = send_command("start_recording", socket_path=_socket_path, timeout=30.0)
+        except IPCError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=503)
+        return JSONResponse({"ok": True, **(data or {})})
+
+    @app.post("/control/stop_recording")
+    def control_stop_recording():
+        try:
+            data = send_command("stop_recording", socket_path=_socket_path, timeout=30.0)
+        except IPCError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=503)
+        return JSONResponse({"ok": True, **(data or {})})
+
     @app.get("/settings", response_class=HTMLResponse)
     def settings_form(request: Request, saved: str | None = None, error: str | None = None):
         cfg = app.state.config
@@ -333,6 +403,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         image_webp_quality: str = Form(...),
         data_location: str = Form(""),
         retention_days: str = Form(...),
+        recordings_retention_days: str = Form(...),
         vision_provider: str = Form(...),
         vision_model: str = Form(...),
         vision_endpoint: str = Form(...),
@@ -361,6 +432,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         camera_idx = _int("Camera device index", camera_device_index, min_value=0)
         quality = _int("Image quality", image_webp_quality, min_value=1, max_value=100)
         retention = _int("Retention days", retention_days, min_value=0)
+        rec_retention = _int("Recordings retention days", recordings_retention_days, min_value=0)
         sampling = _int("Sampling count", sampling_count, min_value=0)
         port = _int("Dashboard port", dashboard_port, min_value=1, max_value=65535)
 
@@ -404,6 +476,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             "storage": {
                 "data_location": data_loc,
                 "retention_days": retention,
+                "recordings_retention_days": rec_retention,
             },
             "vision": {
                 "provider": provider,

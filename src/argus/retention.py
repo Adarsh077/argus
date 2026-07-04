@@ -123,6 +123,16 @@ def purge(
     for _, subdir in _IMAGE_TABLES:
         _purge_stale_dirs(config.images_dir / subdir, cutoff_date, dry_run, result, already_seen)
 
+    # Recordings (mp4) have their own, shorter retention window and live in
+    # a separate directory (config.recordings_dir/YYYY-MM-DD/*.mp4), not
+    # under images_dir. Purge them on the same idempotent, DB-driven pass.
+    rec_days = int(config.get("storage", "recordings_retention_days", default=7))
+    rec_cutoff = now - timedelta(days=rec_days)
+    _purge_table(db, config, "recordings", "recordings", rec_cutoff, dry_run, result)
+    _purge_stale_dirs(
+        config.recordings_dir, rec_cutoff.date(), dry_run, result, set(result.removed_paths)
+    )
+
     logger.info(result.summary())
     return result
 

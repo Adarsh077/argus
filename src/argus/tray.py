@@ -139,6 +139,7 @@ def _make_icon_image(color: str) -> Image.Image:
 _ICON_RUNNING = _make_icon_image("#2ecc71")
 _ICON_PAUSED = _make_icon_image("#f1c40f")
 _ICON_DOWN = _make_icon_image("#95a5a6")
+_ICON_RECORDING = _make_icon_image("#e74c3c")
 
 
 def run_tray(config: Config) -> None:
@@ -152,20 +153,24 @@ def run_tray(config: Config) -> None:
     socket_path = default_socket_path(config.data_dir)
     port = config.get("dashboard", "port", default=8477)
 
-    state = {"running": False, "paused": False}
+    state = {"running": False, "paused": False, "recording": False}
 
     def _refresh_state() -> None:
         try:
             data = send_command("status", socket_path=socket_path, timeout=1.0)
             state["running"] = True
             state["paused"] = bool(data.get("paused"))
+            state["recording"] = bool(data.get("recording"))
         except (IPCError, OSError, ValueError):
             state["running"] = False
             state["paused"] = False
+            state["recording"] = False
 
     def _status_label(item=None) -> str:
         if not state["running"]:
             return "Argus: daemon not running"
+        if state["recording"]:
+            return "Argus: RECORDING"
         return f"Argus: {'PAUSED' if state['paused'] else 'running'}"
 
     def _pause_resume_label(item=None) -> str:
@@ -174,6 +179,14 @@ def run_tray(config: Config) -> None:
         return "Resume" if state["paused"] else "Pause"
 
     def _pause_resume_enabled(item=None) -> bool:
+        return state["running"]
+
+    def _record_label(item=None) -> str:
+        if not state["running"]:
+            return "Start recording (unavailable)"
+        return "Stop recording" if state["recording"] else "Start recording"
+
+    def _record_enabled(item=None) -> bool:
         return state["running"]
 
     def _open_dashboard(icon, item) -> None:
@@ -205,6 +218,36 @@ def run_tray(config: Config) -> None:
         icon.update_menu()
         icon.icon = _current_icon()
 
+    def _notify(icon, message: str, title: str = "Argus") -> None:
+        try:
+            icon.notify(message, title)
+        except Exception:
+            logger.info("notify: %s — %s", title, message)
+
+    def _toggle_recording(icon, item) -> None:
+        if not state["running"]:
+            return
+        if state["recording"]:
+            try:
+                data = send_command("stop_recording", socket_path=socket_path, timeout=30.0)
+                dur = data.get("duration_seconds") if isinstance(data, dict) else None
+                _notify(icon, f"Recording saved ({dur:.0f}s)" if dur else "Recording saved")
+            except (IPCError, OSError, ValueError) as exc:
+                logger.exception("Failed to stop recording")
+                _notify(icon, f"Failed to stop recording: {exc}")
+        else:
+            # start_recording blocks on the daemon until the pipeline is
+            # PLAYING (or fails); allow a generous timeout for portal + GStreamer.
+            try:
+                send_command("start_recording", socket_path=socket_path, timeout=30.0)
+                _notify(icon, "Recording started")
+            except (IPCError, OSError, ValueError) as exc:
+                logger.exception("Failed to start recording")
+                _notify(icon, f"Could not start recording: {exc}")
+        _refresh_state()
+        icon.update_menu()
+        icon.icon = _current_icon()
+
     def _quit(icon, item) -> None:
         if state["running"]:
             try:
@@ -216,6 +259,8 @@ def run_tray(config: Config) -> None:
     def _current_icon() -> Image.Image:
         if not state["running"]:
             return _ICON_DOWN
+        if state["recording"]:
+            return _ICON_RECORDING
         return _ICON_PAUSED if state["paused"] else _ICON_RUNNING
 
     icon = pystray.Icon(
@@ -226,6 +271,7 @@ def run_tray(config: Config) -> None:
             Item(_status_label, None, enabled=False),
             pystray.Menu.SEPARATOR,
             Item(_pause_resume_label, _toggle_pause, enabled=_pause_resume_enabled),
+            Item(_record_label, _toggle_recording, enabled=_record_enabled),
             # default=True → this is the action fired on a plain (left-click)
             # activate of the tray icon on KDE/StatusNotifier, where the full
             # menu is otherwise only reachable via right-click.

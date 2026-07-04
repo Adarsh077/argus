@@ -34,6 +34,9 @@ DEFAULTS: dict[str, Any] = {
         # empty string => default to the platformdirs data dir at runtime
         "data_location": "",
         "retention_days": 30,
+        # Screen recordings (mp4) are far larger than WebP screenshots, so
+        # they get their own, shorter, retention window.
+        "recordings_retention_days": 7,
     },
     "vision": {
         "provider": "google",
@@ -90,6 +93,10 @@ class Config:
     def images_dir(self) -> Path:
         return self.data_dir / "images"
 
+    @property
+    def recordings_dir(self) -> Path:
+        return self.data_dir / "recordings"
+
     def get(self, *keys: str, default: Any = None) -> Any:
         node: Any = self.raw
         for k in keys:
@@ -141,7 +148,7 @@ _EDITABLE_KEYS: dict[str, tuple[str, ...]] = {
         "camera_device_index",
         "image_webp_quality",
     ),
-    "storage": ("data_location", "retention_days"),
+    "storage": ("data_location", "retention_days", "recordings_retention_days"),
     "vision": ("provider", "model", "endpoint", "sampling_count"),
     "dashboard": ("port",),
 }

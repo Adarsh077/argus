@@ -26,6 +26,7 @@
   #daemon-status .dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; display: inline-block; background: #8b93a7; }
   #daemon-status .dot.running { background: #2ecc71; }
   #daemon-status .dot.paused { background: #f1c40f; }
+  #daemon-status .dot.recording { background: #e74c3c; }
   #daemon-status .dot.down { background: #8b93a7; }
   #daemon-status button { padding: 0.25rem 0.6rem; font-size: 0.8rem; }
   form.inline { display: flex; gap: 0.6rem; align-items: end; flex-wrap: wrap; margin: 0.75rem 0 1.5rem; }
@@ -52,6 +53,7 @@
   <a href="/">Home</a>
   <a href="/timeline">Timeline</a>
   <a href="/captures">Captures</a>
+  <a href="/recordings">Recordings</a>
   <a href="/reports">Reports</a>
   <a href="/settings">Settings</a>
   <span id="daemon-status"><span class="dot down"></span><span class="label">checking daemon…</span></span>
@@ -70,20 +72,38 @@ async function refreshDaemonStatus() {
     if (!data.running) {
       dot.className = 'dot down';
       label.textContent = 'daemon not running';
-      const btn = box.querySelector('button');
-      if (btn) btn.remove();
+      box.querySelectorAll('button').forEach(b => b.remove());
       return;
     }
-    dot.className = 'dot ' + (data.paused ? 'paused' : 'running');
-    label.textContent = data.paused ? 'PAUSED' : 'running';
-    let btn = box.querySelector('button');
+    dot.className = 'dot ' + (data.recording ? 'recording' : (data.paused ? 'paused' : 'running'));
+    label.textContent = data.recording ? 'RECORDING' : (data.paused ? 'PAUSED' : 'running');
+    let btn = box.querySelector('button.pause');
     if (!btn) {
       btn = document.createElement('button');
+      btn.className = 'pause';
       box.appendChild(btn);
     }
     btn.textContent = data.paused ? 'Resume' : 'Pause';
     btn.onclick = async () => {
       await fetch(data.paused ? '/control/resume' : '/control/pause', { method: 'POST' });
+      refreshDaemonStatus();
+    };
+    let rec = box.querySelector('button.record');
+    if (!rec) {
+      rec = document.createElement('button');
+      rec.className = 'record';
+      box.appendChild(rec);
+    }
+    rec.textContent = data.recording ? 'Stop rec' : 'Record';
+    rec.disabled = false;
+    rec.onclick = async () => {
+      rec.disabled = true;
+      const url = data.recording ? '/control/stop_recording' : '/control/start_recording';
+      try {
+        const r = await fetch(url, { method: 'POST' });
+        const j = await r.json();
+        if (!j.ok) alert('Recording error: ' + (j.error || 'unknown'));
+      } catch (e) { alert('Recording request failed'); }
       refreshDaemonStatus();
     };
   } catch (e) {

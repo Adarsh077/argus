@@ -14,6 +14,7 @@ import time
 
 from argus.capture.camera import CameraCapturer
 from argus.capture.platform.detect import detect_platform
+from argus.capture.recorder import Recorder
 from argus.capture.screen import ScreenCapturer
 from argus.capture.window import WindowCapturer
 from argus.config import Config
@@ -42,6 +43,10 @@ class Daemon:
         self.screen_capturer = ScreenCapturer(config, self.db)
         self.camera_capturer = CameraCapturer(config, self.db)
 
+        # On-demand screen recorder (tray / dashboard triggered). Runs
+        # independently of the periodic capture loops.
+        self.recorder = Recorder(config, self.db)
+
         # IPC control channel (pause/resume/status/quit). In-memory only —
         # `paused` resets to False (running) on every daemon restart; there
         # is no persistence of pause state across process lifetimes.
@@ -51,6 +56,8 @@ class Daemon:
                 "status": self._ipc_status,
                 "pause": self._ipc_pause,
                 "resume": self._ipc_resume,
+                "start_recording": self._ipc_start_recording,
+                "stop_recording": self._ipc_stop_recording,
                 "quit": self._ipc_quit,
             },
             socket_path=default_socket_path(config.data_dir),
@@ -72,6 +79,7 @@ class Daemon:
         return {
             "running": True,
             "paused": self.is_paused(),
+            "recording": self.recorder.is_recording(),
             "uptime_seconds": uptime,
             "row_counts": self.db.row_counts(),
         }
@@ -85,6 +93,19 @@ class Daemon:
         self.resume()
         logger.info("Resumed via IPC")
         return {"paused": False}
+
+    def _ipc_start_recording(self) -> dict:
+        # Recorder.start() raises on any failure (all-or-nothing); the
+        # exception propagates to the IPC layer as {"ok": false, "error":...}
+        # so the tray/dashboard can show why it failed.
+        data = self.recorder.start()
+        logger.info("Recording started via IPC: %s", data.get("path"))
+        return data
+
+    def _ipc_stop_recording(self) -> dict:
+        data = self.recorder.stop()
+        logger.info("Recording stopped via IPC: %s", data.get("path"))
+        return data
 
     def _ipc_quit(self) -> dict:
         logger.info("Quit requested via IPC")
@@ -209,6 +230,13 @@ class Daemon:
     def stop(self) -> None:
         logger.info("Argus daemon stopping...")
         self._stop.set()
+        # Finalize any active recording FIRST so its mp4 gets a clean EOS
+        # (moov atom) and a DB row before the DB is closed below.
+        try:
+            if self.recorder.is_recording():
+                self.recorder.stop()
+        except Exception:
+            logger.exception("error stopping recorder on shutdown")
         if self._dashboard_server is not None:
             self._dashboard_server.should_exit = True
         self._ipc.stop()

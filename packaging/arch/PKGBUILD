@@ -45,8 +45,14 @@ depends=(
   'python-gobject'          # GI bindings — must come from the system package,
                              # never from pip, see build() below
   'gstreamer'
+  'gst-plugins-base'         # videoconvert/audioconvert/audioresample/audiomixer
+  'gst-plugins-good'         # screen recording: mp4mux (isomp4) + pulsesrc
+  'gst-plugins-ugly'         # screen recording: x264enc (H.264 video encode)
+  'gst-libav'                # screen recording: avenc_aac (AAC audio encode)
   'gst-plugin-pipewire'
   'pipewire'
+  'pipewire-pulse'          # screen recording: pulsesrc mic + sink .monitor (pactl)
+  'libpulse'                # provides pactl for audio-device resolution
   'xdg-desktop-portal-kde'
   'libayatana-appindicator'
   'kdotool'                 # AUR-only. Normal depends= is correct here: AUR
