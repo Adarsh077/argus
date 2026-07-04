@@ -62,7 +62,7 @@ jobs:
           # Unique tag per build so successive main commits don't collide on
           # the same pkgver. Marked as the latest release.
           tag_name: build-${{ github.run_number }}-${{ github.sha }}
-          name: Argus ${{ steps.pkg.outputs.ver }} (build ${{ github.run_number }})
+          name: Argus ${{ steps.pkg.outputs.ver }}
           body: |
             Automated build from commit ${{ github.sha }}.
 
