@@ -29,6 +29,9 @@ DEFAULTS: dict[str, Any] = {
         "camera_enabled": True,
         "camera_device_index": 0,
         "image_webp_quality": 80,
+        # WebRTC noise suppression on the recording mic branch (best-effort;
+        # skipped if the webrtcdsp GStreamer element isn't installed).
+        "recording_noise_suppression": True,
     },
     "storage": {
         # empty string => default to the platformdirs data dir at runtime
@@ -147,6 +150,7 @@ _EDITABLE_KEYS: dict[str, tuple[str, ...]] = {
         "camera_enabled",
         "camera_device_index",
         "image_webp_quality",
+        "recording_noise_suppression",
     ),
     "storage": ("data_location", "retention_days", "recordings_retention_days"),
     "vision": ("provider", "model", "endpoint", "sampling_count"),

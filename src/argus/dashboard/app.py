@@ -399,6 +399,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         camera_interval_seconds: str = Form(...),
         screen_enabled: str | None = Form(None),
         camera_enabled: str | None = Form(None),
+        recording_noise_suppression: str | None = Form(None),
         camera_device_index: str = Form(...),
         image_webp_quality: str = Form(...),
         data_location: str = Form(""),
@@ -472,6 +473,7 @@ def create_app(config: Config | None = None) -> FastAPI:
                 "camera_enabled": bool(camera_enabled),
                 "camera_device_index": camera_idx,
                 "image_webp_quality": quality,
+                "recording_noise_suppression": bool(recording_noise_suppression),
             },
             "storage": {
                 "data_location": data_loc,

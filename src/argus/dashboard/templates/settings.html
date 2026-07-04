@@ -45,6 +45,10 @@
         <td><label>Image quality (1-100, webp)<br>
           <input type="number" min="1" max="100" name="image_webp_quality" value="{{ cfg.capture.image_webp_quality }}"></label></td>
       </tr>
+      <tr>
+        <td><label>Recording mic noise suppression
+          <input type="checkbox" name="recording_noise_suppression" {% if cfg.capture.recording_noise_suppression %}checked{% endif %}></label></td>
+      </tr>
     </table>
   </div>
 

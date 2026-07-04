@@ -48,6 +48,9 @@ depends=(
   'gst-plugins-base'         # videoconvert/audioconvert/audioresample/audiomixer
   'gst-plugins-good'         # screen recording: mp4mux (isomp4) + pulsesrc
   'gst-plugins-ugly'         # screen recording: x264enc (H.264 video encode)
+  'gst-plugin-rsaudiofx'     # screen recording: audiornnoise (RNNoise mic denoise, preferred)
+  'gst-plugins-bad'          # screen recording: webrtcdsp (mic noise suppression fallback)
+  'webrtc-audio-processing'  # backing library for webrtcdsp
   'gst-libav'                # screen recording: avenc_aac (AAC audio encode)
   'gst-plugin-pipewire'
   'pipewire'

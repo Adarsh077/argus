@@ -258,6 +258,9 @@ class Recorder:
             out_path = self._build_out_path(ts)
 
             # 4) Build + start the GStreamer pipeline (blocking → executor).
+            noise_suppress = bool(
+                self.config.get("capture", "recording_noise_suppression", default=True)
+            )
             pipeline = await self._loop.run_in_executor(
                 None,
                 self._build_and_start_pipeline,
@@ -267,6 +270,7 @@ class Recorder:
                 monitor_dev,
                 aacenc,
                 out_path,
+                noise_suppress,
             )
 
             self._pipeline = pipeline
@@ -307,6 +311,7 @@ class Recorder:
         monitor_dev: str,
         aacenc: str,
         out_path: Path,
+        noise_suppress: bool,
     ):
         import gi
 
@@ -315,6 +320,37 @@ class Recorder:
 
         if not Gst.is_initialized():
             Gst.init(None)
+
+        # Optional mic noise suppression. Best-effort: pick the best filter
+        # available and, if none is installed, record the raw mic rather
+        # than failing the whole recording.
+        #
+        # Priority:
+        #   1. audiornnoise (gst-plugin-rsaudiofx) — the RNNoise recurrent
+        #      neural-net denoiser, the same model OBS's "RNNoise" filter
+        #      uses. Best quality.
+        #   2. webrtcdsp (gst-plugins-bad / webrtc-audio-processing) —
+        #      WebRTC spectral suppression. Lighter, less aggressive.
+        # A trailing "audioconvert ! audioresample !" re-normalizes the
+        # format the filter emits before it hits the mixer.
+        mic_filter = ""
+        if noise_suppress:
+            if Gst.ElementFactory.find("audiornnoise") is not None:
+                mic_filter = "audiornnoise ! audioconvert ! audioresample ! "
+            elif Gst.ElementFactory.find("webrtcdsp") is not None:
+                mic_filter = (
+                    "webrtcdsp echo-cancel=false noise-suppression=true "
+                    "noise-suppression-level=high gain-control=true voice-detection=false ! "
+                    "audioconvert ! audioresample ! "
+                )
+            else:
+                logger.warning(
+                    "noise suppression requested but neither 'audiornnoise' "
+                    "(gst-plugin-rsaudiofx) nor 'webrtcdsp' (gst-plugins-bad) is "
+                    "installed; recording raw mic"
+                )
+            if mic_filter:
+                logger.info("mic noise suppression: %s", mic_filter.split()[0])
 
         # `videorate` + a fixed output framerate is REQUIRED: raw frames from
         # the portal's pipewiresrc arrive without reliable PTS, and mp4mux
@@ -326,7 +362,7 @@ class Recorder:
             f"videoconvert ! videorate ! video/x-raw,framerate=30/1 ! queue ! "
             f"x264enc tune=zerolatency speed-preset=veryfast key-int-max=60 ! h264parse ! "
             f"queue ! mp4mux name=mux ! filesink name=fsink "
-            f"pulsesrc name=amic do-timestamp=true ! audioconvert ! audioresample ! queue ! mix. "
+            f"pulsesrc name=amic do-timestamp=true ! audioconvert ! audioresample ! {mic_filter}queue ! mix. "
             f"pulsesrc name=asink do-timestamp=true ! audioconvert ! audioresample ! queue ! mix. "
             f"audiomixer name=mix ! audioconvert ! audioresample ! {aacenc} ! aacparse ! queue ! mux."
         )
