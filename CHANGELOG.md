@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.2.1 (2026-07-04)
+
+### Bug Fixes
+
+- **packaging**: Rename Arch package argus -> argus-tracker
+  ([`015517c`](https://github.com/Adarsh077/argus/commit/015517c94be75cf6d247404b10bd732dcb84251c))
+
+
 ## v0.2.0 (2026-07-04)
 
 ### Features
