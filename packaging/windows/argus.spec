@@ -48,16 +48,20 @@ a = Analysis(
     hiddenimports=[
         # uvicorn/fastapi/starlette pull in some backends dynamically
         # (import-by-string) that PyInstaller's static analysis can miss.
+        # The dashboard is pinned to loop="asyncio" + http="h11" + ws="none"
+        # (see daemon.py _dashboard_loop) precisely so we depend only on the
+        # pure-Python h11/asyncio implementations that reliably bundle, not
+        # the optional C extensions (uvloop/httptools/websockets) that "auto"
+        # prefers and PyInstaller routinely misses.
         "uvicorn.logging",
         "uvicorn.loops",
-        "uvicorn.loops.auto",
+        "uvicorn.loops.asyncio",
         "uvicorn.protocols",
         "uvicorn.protocols.http",
-        "uvicorn.protocols.http.auto",
-        "uvicorn.protocols.websockets",
-        "uvicorn.protocols.websockets.auto",
+        "uvicorn.protocols.http.h11_impl",
         "uvicorn.lifespan",
         "uvicorn.lifespan.on",
+        "h11",
         "pystray._win32",
         "win32timezone",  # pulled in transitively by pywin32 on some setups
     ],

@@ -157,7 +157,24 @@ class Daemon:
             return
         port = self.config.get("dashboard", "port", default=8477)
         server = uvicorn.Server(
-            uvicorn.Config(create_app(self.config), host="127.0.0.1", port=port, log_level="warning")
+            uvicorn.Config(
+                create_app(self.config),
+                host="127.0.0.1",
+                port=port,
+                log_level="warning",
+                # Force the pure-Python asyncio loop + h11 HTTP implementation
+                # instead of uvicorn[standard]'s "auto" (which prefers the
+                # optional C extensions uvloop/httptools). Those extensions are
+                # routinely missed by PyInstaller's static analysis, and a
+                # missing httptools crashes the server thread at startup —
+                # surfacing as "site can't be reached" on the frozen Windows
+                # build. h11 is pure Python, always bundled, and more than fast
+                # enough for a localhost single-user dashboard. uvloop is
+                # Unix-only and irrelevant on Windows regardless.
+                loop="asyncio",
+                http="h11",
+                ws="none",
+            )
         )
         server.install_signal_handlers = lambda: None  # not on main thread
         self._dashboard_server = server

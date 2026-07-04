@@ -17,26 +17,62 @@ main thread). Ctrl-C or "Quit Argus" in the tray menu stops both.
 from __future__ import annotations
 
 import logging
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
+
 import threading
 
-from argus.config import load_config
+from argus.config import default_data_dir, load_config
 from argus.daemon import Daemon
 from argus.tray import run_tray
 
 logger = logging.getLogger("argus.windows_main")
 
 
-def main() -> int:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
+def _setup_logging() -> Path:
+    """Log to a rotating file under the data dir.
+
+    The shipped Windows build runs with no console (``console=False`` in
+    argus.spec, launched via Task Scheduler / pythonw), so stderr goes
+    nowhere. Without a file sink every log line — including the reason a
+    subsystem like the dashboard failed to start — is silently lost, which
+    makes field debugging impossible. Route all logging to a file so there
+    is always something to read.
+    """
+    log_dir = default_data_dir() / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "argus.log"
+
+    handler = RotatingFileHandler(
+        log_path, maxBytes=2_000_000, backupCount=3, encoding="utf-8"
     )
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s")
+    )
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    root.addHandler(handler)
+    return log_path
+
+
+def main() -> int:
+    log_path = _setup_logging()
+    logger.info("Argus (Windows) starting; logging to %s", log_path)
 
     config = load_config()
     daemon = Daemon(config)
 
+    def _run_daemon() -> None:
+        # Any exception raised while starting/running the daemon would
+        # otherwise die on this background thread and print to a
+        # non-existent stderr; log it so the file sink captures the cause.
+        try:
+            daemon.run_forever()
+        except Exception:
+            logger.exception("daemon thread crashed")
+
     daemon_thread = threading.Thread(
-        target=daemon.run_forever, name="argus-daemon-main", daemon=True
+        target=_run_daemon, name="argus-daemon-main", daemon=True
     )
     daemon_thread.start()
 
