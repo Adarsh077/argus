@@ -148,42 +148,44 @@ class Daemon:
             t.start()
 
     def _dashboard_loop(self) -> None:
+        # Everything here — imports, create_app(), Server construction, and
+        # server.run() — runs on this background thread, so it must all be
+        # under one try/except: an exception anywhere would otherwise die
+        # silently on the thread (no console on the frozen Windows build) and
+        # the dashboard would just never come up with nothing logged.
+        port = self.config.get("dashboard", "port", default=8477)
         try:
             import uvicorn
 
             from argus.dashboard.app import create_app
-        except Exception:
-            logger.exception("dashboard unavailable; not serving")
-            return
-        port = self.config.get("dashboard", "port", default=8477)
-        server = uvicorn.Server(
-            uvicorn.Config(
-                create_app(self.config),
-                host="127.0.0.1",
-                port=port,
-                log_level="warning",
-                # Force the pure-Python asyncio loop + h11 HTTP implementation
-                # instead of uvicorn[standard]'s "auto" (which prefers the
-                # optional C extensions uvloop/httptools). Those extensions are
-                # routinely missed by PyInstaller's static analysis, and a
-                # missing httptools crashes the server thread at startup —
-                # surfacing as "site can't be reached" on the frozen Windows
-                # build. h11 is pure Python, always bundled, and more than fast
-                # enough for a localhost single-user dashboard. uvloop is
-                # Unix-only and irrelevant on Windows regardless.
-                loop="asyncio",
-                http="h11",
-                ws="none",
+
+            app = create_app(self.config)
+            server = uvicorn.Server(
+                uvicorn.Config(
+                    app,
+                    host="127.0.0.1",
+                    port=port,
+                    log_level="warning",
+                    # Force the pure-Python asyncio loop + h11 HTTP
+                    # implementation instead of uvicorn[standard]'s "auto"
+                    # (which prefers the optional C extensions
+                    # uvloop/httptools). Those extensions are routinely missed
+                    # by PyInstaller's static analysis, and a missing httptools
+                    # crashes the server thread at startup. h11 is pure Python,
+                    # always bundled, and more than fast enough for a localhost
+                    # single-user dashboard. uvloop is Unix-only anyway.
+                    loop="asyncio",
+                    http="h11",
+                    ws="none",
+                )
             )
-        )
-        server.install_signal_handlers = lambda: None  # not on main thread
-        self._dashboard_server = server
-        logger.info("dashboard serving on http://127.0.0.1:%d", port)
-        try:
+            server.install_signal_handlers = lambda: None  # not on main thread
+            self._dashboard_server = server
+            logger.info("dashboard serving on http://127.0.0.1:%d", port)
             server.run()
+            logger.info("dashboard stopped")
         except Exception:
-            logger.exception("dashboard server crashed")
-        logger.info("dashboard stopped")
+            logger.exception("dashboard failed to start / crashed")
 
     def _retention_loop(self) -> None:
         logger.info("retention loop starting (interval=%ss)", _RETENTION_INTERVAL_SECONDS)
