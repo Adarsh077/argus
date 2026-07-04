@@ -136,7 +136,10 @@ def run_tray(config: Config) -> None:
             Item(_status_label, None, enabled=False),
             pystray.Menu.SEPARATOR,
             Item(_pause_resume_label, _toggle_pause, enabled=_pause_resume_enabled),
-            Item("Open dashboard", _open_dashboard),
+            # default=True → this is the action fired on a plain (left-click)
+            # activate of the tray icon on KDE/StatusNotifier, where the full
+            # menu is otherwise only reachable via right-click.
+            Item("Open dashboard", _open_dashboard, default=True),
             pystray.Menu.SEPARATOR,
             Item("Quit Argus", _quit),
         ),
