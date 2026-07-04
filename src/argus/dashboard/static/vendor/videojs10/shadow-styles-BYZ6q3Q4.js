@@ -1,0 +1,3 @@
+function e(e,t){let n=globalThis.document;if(!n||n.getElementById(e))return;let r=n.createElement(`style`);r.id=e,r.textContent=t,n.head.appendChild(r)}function t(e){return globalThis.CSSStyleSheet!==void 0&&e instanceof globalThis.CSSStyleSheet}function n(e){return typeof e==`string`?e:Array.from(e.cssRules).map(e=>e.cssText).join(`
+`)}function r(e){if(globalThis.CSSStyleSheet===void 0)return e;let t=new globalThis.CSSStyleSheet;return t.replaceSync(e),t}function i(e,r){if(r.every(t)&&`adoptedStyleSheets`in e){e.adoptedStyleSheets=r;return}let i=e.ownerDocument;for(let t of r.map(n)){let n=i.createElement(`style`);n.textContent=t,e.appendChild(n)}}export{r as n,e as r,i as t};
+//# sourceMappingURL=shadow-styles-BYZ6q3Q4.js.map

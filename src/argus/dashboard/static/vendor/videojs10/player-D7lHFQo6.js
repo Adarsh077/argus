@@ -1,0 +1,2 @@
+import{A as e,j as t,s as n,t as r}from"./create-player-B2W5yr5I.js";import{f as i}from"./predicate-Dxl3IuYh.js";const{ProviderMixin:a}=r({features:n});var o=class extends a(t){static{this.tagName=`video-player`}};i(o),i(e);export{o as t};
+//# sourceMappingURL=player-D7lHFQo6.js.map

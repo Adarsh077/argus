@@ -1,0 +1,2 @@
+function e(e){return e.replace(/[A-Z]/g,e=>`-${e.toLowerCase()}`)}function t(e,t){let n={};for(let r of t)Object.hasOwn(e,r)&&(n[r]=e[r]);return n}export{e as n,t};
+//# sourceMappingURL=pick-CERGq1No.js.map

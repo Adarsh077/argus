@@ -1,0 +1,2 @@
+function e(e){if(`any`in AbortSignal)return AbortSignal.any(e);let t=new AbortController;for(let n of e){if(n.aborted)return t.abort(n.reason),t.signal;n.addEventListener(`abort`,()=>t.abort(n.reason),{signal:t.signal})}return t.signal}export{e as t};
+//# sourceMappingURL=abort-0nUH9HXc.js.map
