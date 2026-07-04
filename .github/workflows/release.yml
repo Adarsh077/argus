@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
+  linux-build:
     runs-on: ubuntu-latest
     container:
       image: archlinux:base-devel
@@ -78,7 +78,7 @@ jobs:
           files: ${{ steps.pkg.outputs.path }}
           make_latest: true
 
-  build-windows:
+  windows-build:
     # Native Windows runner — a Windows .exe CANNOT be cross-compiled from
     # Linux, so PyInstaller must run here. Runs independently of the Arch
     # job and attaches its installer to the same release tag.
