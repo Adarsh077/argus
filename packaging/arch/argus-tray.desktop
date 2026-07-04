@@ -8,3 +8,9 @@ Terminal=false
 Categories=Utility;
 X-GNOME-Autostart-enabled=true
 NoDisplay=false
+# Start after the Plasma shell (which provides the StatusNotifierWatcher /
+# system-tray host) so the tray icon registers against a live tray rather
+# than a dead fallback. The tray process also waits for the watcher itself.
+X-KDE-autostart-phase=2
+X-KDE-autostart-after=plasmashell
+X-GNOME-Autostart-Delay=5

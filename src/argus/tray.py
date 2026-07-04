@@ -39,6 +39,92 @@ logger = logging.getLogger("argus.tray")
 _POLL_INTERVAL_SECONDS = 3
 
 
+def _patch_pystray_icon_extension(icon_dir) -> None:
+    """Make pystray's GTK/AppIndicator backend write its icon to a real
+    ``.png`` file instead of ``tempfile.mktemp()`` (extensionless).
+
+    libayatana-appindicator passes the icon's directory to KDE as an
+    icon-theme path and the file's *basename* as an icon name; KDE then
+    looks for ``<name>.png`` / ``<name>.svg`` there. pystray's default
+    extensionless temp path means KDE finds nothing and shows a generic
+    square fallback (GNOME reads the pixmap directly, so it only breaks on
+    KDE/StatusNotifier). Writing a ``.png`` in a stable dir fixes it.
+    """
+    if sys.platform != "linux":
+        return
+    try:
+        from pystray._util import gtk as _gtk
+    except Exception:
+        return
+
+    import os
+
+    os.makedirs(icon_dir, exist_ok=True)
+
+    def _update_fs_icon(self) -> None:  # noqa: ANN001 - matches pystray signature
+        # Stable per-indicator filename with a .png extension so KDE's
+        # themed-icon lookup (name = basename sans extension, path = dir)
+        # resolves the file.
+        path = os.path.join(icon_dir, f"argus-tray-{id(self)}.png")
+        self.icon.save(path, "PNG")
+        self._icon_path = path
+        self._icon_valid = True
+
+    _gtk.GtkIcon._update_fs_icon = _update_fs_icon
+
+
+def _wait_for_status_notifier(timeout: float = 60.0) -> bool:
+    """Block until a StatusNotifier host (KDE/GNOME system-tray watcher) owns
+    its bus name, so the AppIndicator icon registers against a live tray.
+
+    On autostart at login the tray process can start before Plasma's
+    StatusNotifierWatcher is up; registering then leaves a dead fallback
+    (square) icon with no working menu. Poll the session bus until the
+    watcher appears. Linux-only (needs GI/D-Bus); returns True immediately
+    elsewhere or if the check can't run (best-effort, never blocks forever).
+    """
+    if sys.platform != "linux":
+        return True
+    try:
+        import gi
+
+        gi.require_version("Gio", "2.0")
+        gi.require_version("GLib", "2.0")
+        from gi.repository import Gio, GLib
+    except Exception:
+        return True  # can't check — proceed and hope the host is up
+
+    watchers = ("org.kde.StatusNotifierWatcher", "org.freedesktop.StatusNotifierWatcher")
+    try:
+        bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    except Exception:
+        return True
+    deadline = timeout
+    waited = 0.0
+    while waited < deadline:
+        for name in watchers:
+            try:
+                res = bus.call_sync(
+                    "org.freedesktop.DBus",
+                    "/org/freedesktop/DBus",
+                    "org.freedesktop.DBus",
+                    "NameHasOwner",
+                    GLib.Variant("(s)", (name,)),
+                    GLib.VariantType("(b)"),
+                    Gio.DBusCallFlags.NONE,
+                    1000,
+                    None,
+                )
+                if res.unpack()[0]:
+                    return True
+            except Exception:
+                pass
+        time.sleep(1.0)
+        waited += 1.0
+    logger.warning("StatusNotifier host not found after %.0fs; starting anyway", timeout)
+    return False
+
+
 def _make_icon_image(color: str) -> Image.Image:
     """Small generated dot icon — green=running, yellow=paused, gray=down.
     Avoids needing to ship an icon asset file."""
@@ -58,6 +144,10 @@ _ICON_DOWN = _make_icon_image("#95a5a6")
 def run_tray(config: Config) -> None:
     import pystray
     from pystray import MenuItem as Item
+
+    # Must run before creating the Icon: fixes the KDE "generic square"
+    # fallback caused by pystray writing an extensionless icon temp file.
+    _patch_pystray_icon_extension(config.data_dir / "tray-icons")
 
     socket_path = default_socket_path(config.data_dir)
     port = config.get("dashboard", "port", default=8477)
@@ -155,6 +245,10 @@ def run_tray(config: Config) -> None:
             if state != prev:
                 icon.icon = _current_icon()
                 icon.update_menu()
+
+    # Wait for the desktop's system-tray host before registering, or the
+    # AppIndicator icon shows a dead fallback with no menu (autostart race).
+    _wait_for_status_notifier()
 
     _refresh_state()
     icon.icon = _current_icon()

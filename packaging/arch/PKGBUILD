@@ -122,12 +122,17 @@ package() {
   install -dm755 "$pkgdir/opt/argus"
   cp -a "$srcdir/venv" "$pkgdir/opt/argus/venv"
 
-  # Wrapper: always exec the venv's own console-script entry point so the
-  # venv's --system-site-packages interpreter (not whatever `python` is
-  # first on $PATH) is what actually runs.
+  # Wrapper: invoke the venv interpreter *directly* on the console script
+  # rather than exec'ing the script itself. The console script's shebang is
+  # baked to the build-time venv path ($srcdir/venv/bin/python) — a
+  # transient makepkg directory that won't exist on the target machine —
+  # so exec'ing it would fail (or silently run the wrong interpreter) for a
+  # real install. Running `python <script>` ignores that shebang. The
+  # venv's bin/python is a symlink to the system python3 (venv default), so
+  # it resolves to an installed interpreter with --system-site-packages.
   install -Dm755 /dev/stdin "$pkgdir/usr/bin/argus" <<'EOF'
 #!/bin/sh
-exec /opt/argus/venv/bin/argus "$@"
+exec /opt/argus/venv/bin/python /opt/argus/venv/bin/argus "$@"
 EOF
 
   # systemd --user unit: install the repo's unit but repoint ExecStart at
