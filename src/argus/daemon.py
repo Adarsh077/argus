@@ -177,6 +177,15 @@ class Daemon:
                     loop="asyncio",
                     http="h11",
                     ws="none",
+                    # Disable uvicorn's own logging setup. Its default
+                    # ColourizedFormatter calls sys.stdout.isatty() at init,
+                    # but on the no-console frozen Windows build sys.stdout is
+                    # None -> AttributeError -> the whole dashboard thread dies
+                    # before it can bind. We already route all logging to our
+                    # rotating file handler (see windows_main), so uvicorn
+                    # configuring its own formatters is both unwanted and the
+                    # sole thing that was breaking the dashboard on Windows.
+                    log_config=None,
                 )
             )
             server.install_signal_handlers = lambda: None  # not on main thread
