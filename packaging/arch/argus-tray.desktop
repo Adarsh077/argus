@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Argus Tray
+Comment=Argus activity tracker — tray icon (pause/resume/quit/open dashboard)
+Exec=/usr/bin/argus tray
+Icon=utilities-system-monitor
+Terminal=false
+Categories=Utility;
+X-GNOME-Autostart-enabled=true
+NoDisplay=false

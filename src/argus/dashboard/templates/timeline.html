@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Argus — Timeline {{ date }}{% endblock %}
+{% block content %}
+<h1>Timeline — {{ date }}</h1>
+<form class="inline" method="get" action="/timeline">
+  <label>Date <input type="date" name="date" value="{{ date }}"></label>
+  <button type="submit">Go</button>
+</form>
+<p class="muted">Total tracked time: <strong>{{ total_duration }}</strong> ({{ sessions|length }} sessions, {{ event_count }} samples)</p>
+
+<table>
+  <tr><th>Start</th><th>End</th><th>Duration</th><th>App</th><th>Window titles</th></tr>
+  {% for s in sessions %}
+  <tr>
+    <td>{{ s.start_local }}</td>
+    <td>{{ s.end_local }}</td>
+    <td>{{ s.duration }}</td>
+    <td>{{ s.app }}</td>
+    <td>{{ s.titles }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="5" class="muted">No sessions for this date.</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Argus — Reports{% endblock %}
+{% block content %}
+<h1>Reports</h1>
+<table>
+  <tr><th>Type</th><th>Period</th><th>Generated at</th></tr>
+  {% for r in reports %}
+  <tr>
+    <td>{{ r.type }}</td>
+    <td><a href="/report/{{ r.type }}/{{ r.period_key }}">{{ r.period_key }}</a></td>
+    <td>{{ r.generated_at }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="3" class="muted">No reports generated yet.</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

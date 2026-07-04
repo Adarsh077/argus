@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Argus — Captures {{ date }}{% endblock %}
+{% block content %}
+<h1>Captures — {{ date }}</h1>
+<form class="inline" method="get" action="/captures">
+  <label>Date <input type="date" name="date" value="{{ date }}"></label>
+  <label>Type
+    <select name="type">
+      <option value="screenshot" {% if type == "screenshot" %}selected{% endif %}>Screenshot</option>
+      <option value="camera" {% if type == "camera" %}selected{% endif %}>Camera</option>
+    </select>
+  </label>
+  <label>Search (app / title) <input type="text" name="q" value="{{ q or '' }}"></label>
+  <button type="submit">Filter</button>
+</form>
+
+<p class="muted">{{ captures|length }} capture(s)</p>
+
+<div class="grid">
+  {% for c in captures %}
+  <a class="thumb" href="/image?path={{ c.path }}" target="_blank">
+    <img src="/image?path={{ c.path }}" loading="lazy">
+    <div class="cap">{{ c.local_time }}{% if c.label %} — {{ c.label }}{% endif %}</div>
+  </a>
+  {% else %}
+  <p class="muted">No captures match.</p>
+  {% endfor %}
+</div>
+{% endblock %}

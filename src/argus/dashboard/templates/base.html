@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{% block title %}Argus{% endblock %}</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 0; background: #111319; color: #e7e9ee; }
+  header { background: #1b1e27; padding: 0.75rem 1.5rem; display: flex; align-items: center; gap: 1.5rem; border-bottom: 1px solid #2a2e3a; }
+  header a { color: #9fd0ff; text-decoration: none; font-weight: 600; }
+  header a:hover { text-decoration: underline; }
+  header .brand { color: #fff; font-weight: 800; font-size: 1.1rem; }
+  main { padding: 1.25rem 1.5rem 3rem; max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; }
+  h2 { font-size: 1.1rem; margin-top: 2rem; color: #cdd3e0; }
+  table { border-collapse: collapse; width: 100%; margin: 0.5rem 0 1.5rem; }
+  th, td { text-align: left; padding: 0.35rem 0.6rem; border-bottom: 1px solid #2a2e3a; font-size: 0.92rem; }
+  th { color: #9aa2b5; font-weight: 600; }
+  a { color: #7fc4ff; }
+  .muted { color: #8b93a7; }
+  .grid { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+  .thumb { display: block; width: 180px; }
+  .thumb img { width: 180px; height: 110px; object-fit: cover; border-radius: 6px; border: 1px solid #2a2e3a; background: #05070c; }
+  .thumb .cap { font-size: 0.72rem; color: #8b93a7; margin-top: 0.2rem; word-break: break-word; }
+  #daemon-status { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
+  #daemon-status .dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; display: inline-block; background: #8b93a7; }
+  #daemon-status .dot.running { background: #2ecc71; }
+  #daemon-status .dot.paused { background: #f1c40f; }
+  #daemon-status .dot.down { background: #8b93a7; }
+  #daemon-status button { padding: 0.25rem 0.6rem; font-size: 0.8rem; }
+  form.inline { display: flex; gap: 0.6rem; align-items: end; flex-wrap: wrap; margin: 0.75rem 0 1.5rem; }
+  form.inline label { display: flex; flex-direction: column; font-size: 0.8rem; color: #9aa2b5; gap: 0.2rem; }
+  input, select, button { font: inherit; background: #1b1e27; color: #e7e9ee; border: 1px solid #333849; border-radius: 5px; padding: 0.4rem 0.55rem; }
+  button { background: #2c5aa0; border-color: #2c5aa0; cursor: pointer; }
+  button:hover { background: #3568b8; }
+  .card { background: #191c25; border: 1px solid #2a2e3a; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+  .report-body { background: #0e1016; border-radius: 8px; padding: 1rem 1.5rem; }
+  .report-body pre { overflow-x: auto; }
+  @media (prefers-color-scheme: light) {
+    body { background: #f5f6f9; color: #1a1d24; }
+    header { background: #fff; border-color: #dde1e8; }
+    .card, .report-body { background: #fff; border-color: #dde1e8; }
+    th, td { border-color: #e4e7ee; }
+    input, select, button { background: #fff; color: #1a1d24; border-color: #ccd1db; }
+    .thumb img { border-color: #ccd1db; background: #eee; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <span class="brand">Argus</span>
+  <a href="/">Home</a>
+  <a href="/timeline">Timeline</a>
+  <a href="/captures">Captures</a>
+  <a href="/reports">Reports</a>
+  <a href="/settings">Settings</a>
+  <span id="daemon-status"><span class="dot down"></span><span class="label">checking daemon…</span></span>
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+<script>
+async function refreshDaemonStatus() {
+  const box = document.getElementById('daemon-status');
+  const dot = box.querySelector('.dot');
+  const label = box.querySelector('.label');
+  try {
+    const resp = await fetch('/control/status');
+    const data = await resp.json();
+    if (!data.running) {
+      dot.className = 'dot down';
+      label.textContent = 'daemon not running';
+      const btn = box.querySelector('button');
+      if (btn) btn.remove();
+      return;
+    }
+    dot.className = 'dot ' + (data.paused ? 'paused' : 'running');
+    label.textContent = data.paused ? 'PAUSED' : 'running';
+    let btn = box.querySelector('button');
+    if (!btn) {
+      btn = document.createElement('button');
+      box.appendChild(btn);
+    }
+    btn.textContent = data.paused ? 'Resume' : 'Pause';
+    btn.onclick = async () => {
+      await fetch(data.paused ? '/control/resume' : '/control/pause', { method: 'POST' });
+      refreshDaemonStatus();
+    };
+  } catch (e) {
+    dot.className = 'dot down';
+    label.textContent = 'daemon not running';
+  }
+}
+refreshDaemonStatus();
+setInterval(refreshDaemonStatus, 5000);
+</script>
+</body>
+</html>

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Argus — Home{% endblock %}
+{% block content %}
+<h1>Today — {{ today }}</h1>
+<p class="muted">Total tracked time: <strong>{{ total_duration }}</strong> ({{ session_count }} sessions, {{ event_count }} samples)</p>
+
+<h2>Time per app (today)</h2>
+<table>
+  <tr><th>App</th><th>Time</th></tr>
+  {% for app, dur in per_app %}
+  <tr><td>{{ app }}</td><td>{{ dur }}</td></tr>
+  {% else %}
+  <tr><td colspan="2" class="muted">No activity recorded yet today.</td></tr>
+  {% endfor %}
+</table>
+
+<p><a href="/timeline?date={{ today }}">Full timeline for today &rarr;</a></p>
+
+<h2>Recent captures</h2>
+<div class="grid">
+  {% for c in recent_captures %}
+  <a class="thumb" href="/captures?date={{ c.date }}&type={{ c.type }}">
+    <img src="/image?path={{ c.path }}" loading="lazy">
+    <div class="cap">{{ c.type }} — {{ c.local_time }}</div>
+  </a>
+  {% else %}
+  <p class="muted">No captures yet.</p>
+  {% endfor %}
+</div>
+
+<h2>Generate a report</h2>
+<form class="inline" method="post" action="/generate">
+  <label>Date
+    <input type="date" name="date" value="{{ today }}">
+  </label>
+  <label>Type
+    <select name="report_type">
+      <option value="daily">Daily</option>
+      <option value="weekly">Weekly</option>
+    </select>
+  </label>
+  <label>Vision
+    <input type="checkbox" name="vision" value="1">
+  </label>
+  <button type="submit">Generate</button>
+</form>
+{% endblock %}

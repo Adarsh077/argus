@@ -1,0 +1,46 @@
+[Unit]
+Description=Argus — always-on activity tracker
+# Tied to the graphical session (not default.target): screen capture on
+# KDE-Wayland goes through the xdg-desktop-portal ScreenCast interface and
+# PipeWire, both of which only exist while a graphical session is running,
+# and active-window queries need the compositor's D-Bus/Wayland socket.
+# A default.target-bound unit would start (and keep restarting-failing)
+# before/after the graphical session exists, e.g. over SSH logins or before
+# the desktop is up. graphical-session.target starts with the desktop and
+# stops with it, so Argus's lifecycle matches the thing it actually depends on.
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+# Dev placeholder: resolved uv-managed venv entry point. `argus service
+# install` rewrites this line to the interpreter/executable that was used
+# to run the install command, so a real install always has a live path
+# here. Packaging (PKGBUILD) will instead point this at the installed
+# system binary, e.g. /usr/bin/argus, at package-install time.
+ExecStart=%h/personal/argus/.venv/bin/argus run
+Restart=always
+RestartSec=5
+# systemd user services do NOT get WAYLAND_DISPLAY / DBUS_SESSION_BUS_ADDRESS
+# / XDG_RUNTIME_DIR / DISPLAY hardcoded here on purpose — these vary per
+# login and per machine. Instead the unit relies on the user systemd
+# manager's own environment block already carrying them. On distros/DEs
+# that export these via `systemctl --user import-environment` in the
+# session startup scripts (or via systemd's own user@.service environment
+# generators, e.g. plasma-workspace's env scripts under
+# /etc/xdg/plasma-workspace/env/ or ~/.config/plasma-workspace/env/), a
+# `systemctl --user daemon-reload` + restart is all that's needed after
+# login for this service to pick them up.
+#
+# If a fresh setup shows the daemon running but window/screen capture
+# failing for lack of Wayland/D-Bus env (check `systemctl --user
+# show-environment` for WAYLAND_DISPLAY/DBUS_SESSION_BUS_ADDRESS/
+# XDG_RUNTIME_DIR/DISPLAY), fix it at the session level, not in this
+# unit, e.g. add to the compositor's startup script:
+#   systemctl --user import-environment WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR DISPLAY
+# or (systemd ≥ 253) rely on `systemd --user` being started by the
+# graphical-session and inheriting them from pam_systemd / the display
+# manager automatically (the common case on modern KDE Plasma + SDDM).
+
+[Install]
+WantedBy=graphical-session.target

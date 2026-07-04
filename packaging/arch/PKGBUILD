@@ -1,0 +1,146 @@
+# Maintainer: (unset — not yet published to AUR)
+#
+# Argus is not on AUR yet. Build/install locally with:
+#   cd packaging/arch && makepkg -si
+#
+# --- venv-under-/opt approach (why) -----------------------------------
+# Rather than `pip install --root="$pkgdir" ...` straight into Arch's
+# system site-packages (python3.x/site-packages), this PKGBUILD builds a
+# dedicated venv at /opt/argus/venv at package-build time and installs
+# Argus + its *pure-Python* dependencies into it. A wrapper script at
+# /usr/bin/argus execs that venv's own interpreter. This avoids Argus's
+# pinned dependency versions colliding with whatever versions other
+# system Python tools/pacman packages need in the shared site-packages
+# tree, at the cost of vendoring more bytes into the package.
+#
+# CAVEAT (read before trusting this across a `pacman -Syu`): the venv is
+# created with `--system-site-packages` so it can see python-gobject /
+# GStreamer's GI bindings (see "do NOT pip-install pygobject" below), but
+# the venv's *own* embedded python3 interpreter/library (copied at build
+# time under /opt/argus/venv) is only ABI-compatible with the system
+# python3.so that existed at build time. When Arch bumps the `python`
+# package's SONAME on a Python **major/minor** version bump (e.g.
+# 3.12->3.13), pacman relinks/replaces the system interpreter and this
+# package's venv interpreter goes stale (system-site-packages compiled
+# extensions, notably PyGObject's, will no longer load against it). A
+# rebuild (`makepkg -f` + reinstall) is required whenever `python` gets
+# such a bump — this is *not* automatic and pacman has no hook for it in
+# this PKGBUILD. Ordinary patch-level python bumps (3.12.x -> 3.12.y) are
+# fine and do not require a rebuild.
+#
+# LICENSE: no LICENSE file exists in the repo at the time of writing, so
+# no `license=()` claim is made and no license file is installed. Add a
+# LICENSE to the repo root and an `install -Dm644 LICENSE ...` line here
+# once one exists.
+
+pkgname=argus
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Always-on personal desktop activity tracker (KDE Plasma / Wayland)"
+arch=('x86_64')
+url="https://github.com/example/argus"  # placeholder — not yet published
+# license=('...')  # intentionally omitted, see note above: no LICENSE file yet
+depends=(
+  'python'
+  'python-gobject'          # GI bindings — must come from the system package,
+                             # never from pip, see build() below
+  'gstreamer'
+  'gst-plugin-pipewire'
+  'pipewire'
+  'xdg-desktop-portal-kde'
+  'libayatana-appindicator'
+  'kdotool'                 # AUR-only. Normal depends= is correct here: AUR
+                             # helpers (paru/yay) resolve transitive AUR
+                             # dependencies themselves; optdepends= would NOT
+                             # be auto-installed and would leave active-window
+                             # queries broken on Wayland by default.
+)
+makedepends=('uv' 'rsync')
+options=('!strip')  # binaries in the vendored venv are third-party wheels; leave them alone
+source=("argus-tray.desktop")
+sha256sums=('SKIP')
+install=argus.install
+
+# Root of the actual Argus source tree (this PKGBUILD lives *inside* the
+# repo, at packaging/arch/, rather than being fetched from a separate
+# tarball/VCS source — there is no published release yet).
+_repo_root="$( cd "$startdir/../.." && pwd )"
+
+build() {
+  # Copy the repo into a clean build root outside the repo tree first.
+  # makepkg's own $srcdir (packaging/arch/src/) lives *inside* this repo,
+  # so building `uv build` directly from $_repo_root would recurse into
+  # $srcdir itself (which by then contains extracted sources / symlinks
+  # back into the repo) and `uv build`'s sdist step chokes on that
+  # (absolute/external symlink). Building from an isolated copy avoids it.
+  rm -rf "$srcdir/build-root"
+  mkdir -p "$srcdir/build-root"
+  rsync -a --exclude='.git' --exclude='dist' --exclude='packaging/arch/src' \
+    --exclude='packaging/arch/pkg' --exclude='.venv' \
+    "$_repo_root"/ "$srcdir/build-root"/
+  cd "$srcdir/build-root"
+  rm -rf dist
+  uv build
+
+  # Create the venv with --system-site-packages so it can see
+  # python-gobject / GStreamer's GI bindings installed as Arch system
+  # packages (depends= above) — these are NOT pip-installable in any
+  # reliable way (they wrap C libraries via gobject-introspection typelibs
+  # that must match the system GStreamer/GLib) and must never be pulled
+  # from PyPI here.
+  python -m venv --system-site-packages "$srcdir/venv"
+
+  "$srcdir/venv/bin/python" -m pip install --upgrade pip
+
+  # Install the built wheel with --no-deps, then install its *pure*
+  # Python dependencies explicitly (mirrors pyproject.toml's
+  # [project.dependencies], minus pygobject [system package, see above]
+  # and pywin32 [Windows-only, irrelevant here]). --no-deps guarantees
+  # pip never tries (and never silently succeeds/fails) to pull pygobject
+  # from PyPI.
+  "$srcdir/venv/bin/python" -m pip install --no-deps \
+    "$srcdir/build-root"/dist/argus-${pkgver}-py3-none-any.whl
+
+  "$srcdir/venv/bin/python" -m pip install \
+    'dbus-next>=0.2.3' \
+    'fastapi>=0.139.0' \
+    'httpx>=0.28.1' \
+    'jinja2>=3.1.6' \
+    'markdown>=3.10.2' \
+    'mss>=10.2.0' \
+    'opencv-python>=5.0.0.93' \
+    'pillow>=12.3.0' \
+    'platformdirs>=4.10.0' \
+    'psutil>=7.2.2' \
+    'pystray>=0.19.5' \
+    'python-multipart>=0.0.32' \
+    'tomli-w>=1.2.0' \
+    'uvicorn[standard]>=0.49.0'
+}
+
+package() {
+  install -dm755 "$pkgdir/opt/argus"
+  cp -a "$srcdir/venv" "$pkgdir/opt/argus/venv"
+
+  # Wrapper: always exec the venv's own console-script entry point so the
+  # venv's --system-site-packages interpreter (not whatever `python` is
+  # first on $PATH) is what actually runs.
+  install -Dm755 /dev/stdin "$pkgdir/usr/bin/argus" <<'EOF'
+#!/bin/sh
+exec /opt/argus/venv/bin/argus "$@"
+EOF
+
+  # systemd --user unit: install the repo's unit but repoint ExecStart at
+  # the packaged binary — the file as checked into the repo carries a dev
+  # (uv-managed venv) placeholder path, by design (see that file's own
+  # comments), meant to be rewritten exactly like this at package time.
+  install -Dm644 "$_repo_root/packaging/arch/argus.service" \
+    "$pkgdir/usr/lib/systemd/user/argus.service"
+  sed -i 's#^ExecStart=.*#ExecStart=/usr/bin/argus run#' \
+    "$pkgdir/usr/lib/systemd/user/argus.service"
+
+  # Tray autostart (XDG autostart dir — starts the tray icon at login for
+  # every graphical session, independent of the systemd user unit above).
+  install -Dm644 "$srcdir/argus-tray.desktop" \
+    "$pkgdir/etc/xdg/autostart/argus-tray.desktop"
+}

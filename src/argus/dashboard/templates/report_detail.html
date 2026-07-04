@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Argus — {{ report_type }} report {{ period_key }}{% endblock %}
+{% block content %}
+<h1>{{ report_type|capitalize }} report — {{ period_key }}</h1>
+<p class="muted">Generated at: {{ generated_at }}</p>
+<div class="report-body">
+{{ body_html | safe }}
+</div>
+{% endblock %}

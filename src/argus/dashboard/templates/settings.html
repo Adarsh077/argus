@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Argus — Settings{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+
+<p class="muted">Config file: <code>{{ config_path }}</code></p>
+<p class="muted">
+  Vision API key: {{ "detected in env" if api_key_present else "NOT set" }}
+  — API keys are always read from the environment (e.g. <code>GEMINI_API_KEY</code>)
+  and are never shown, stored, or editable here.
+</p>
+
+{% if saved %}
+<p class="card" style="border-color:#3a8f5a;">Settings saved. Capture-loop changes
+  (intervals, screen/camera enable, camera device) take effect the next time
+  the daemon is restarted. Dashboard-served values (vision provider/model,
+  report generation) take effect on next use.</p>
+{% endif %}
+{% if error %}
+<p class="card" style="border-color:#b5453f;">{{ error }}</p>
+{% endif %}
+
+<form method="post" action="/settings">
+
+  <div class="card">
+    <h2 style="margin-top:0;">Capture <span class="muted">(restart daemon to apply)</span></h2>
+    <table>
+      <tr>
+        <td><label>Window poll interval (s)<br>
+          <input type="number" min="1" name="window_interval_seconds" value="{{ cfg.capture.window_interval_seconds }}"></label></td>
+        <td><label>Screen capture interval (s)<br>
+          <input type="number" min="1" name="screen_interval_seconds" value="{{ cfg.capture.screen_interval_seconds }}"></label></td>
+        <td><label>Camera capture interval (s)<br>
+          <input type="number" min="1" name="camera_interval_seconds" value="{{ cfg.capture.camera_interval_seconds }}"></label></td>
+      </tr>
+      <tr>
+        <td><label>Screen capture enabled<br>
+          <input type="checkbox" name="screen_enabled" {% if cfg.capture.screen_enabled %}checked{% endif %}></label></td>
+        <td><label>Camera capture enabled<br>
+          <input type="checkbox" name="camera_enabled" {% if cfg.capture.camera_enabled %}checked{% endif %}></label></td>
+        <td><label>Camera device index<br>
+          <input type="number" min="0" name="camera_device_index" value="{{ cfg.capture.camera_device_index }}"></label></td>
+      </tr>
+      <tr>
+        <td><label>Image quality (1-100, webp)<br>
+          <input type="number" min="1" max="100" name="image_webp_quality" value="{{ cfg.capture.image_webp_quality }}"></label></td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Storage / Retention</h2>
+    <table>
+      <tr>
+        <td><label>Data location <span class="muted">(blank = default; only affects new data)</span><br>
+          <input type="text" size="40" name="data_location" value="{{ cfg.storage.data_location }}"></label></td>
+        <td><label>Retention window (days, 0 = keep forever)<br>
+          <input type="number" min="0" name="retention_days" value="{{ cfg.storage.retention_days }}"></label></td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Vision</h2>
+    <table>
+      <tr>
+        <td><label>Provider<br>
+          <input type="text" name="vision_provider" value="{{ cfg.vision.provider }}"></label></td>
+        <td><label>Model<br>
+          <input type="text" name="vision_model" value="{{ cfg.vision.model }}"></label></td>
+      </tr>
+      <tr>
+        <td colspan="2"><label>Endpoint<br>
+          <input type="text" size="60" name="vision_endpoint" value="{{ cfg.vision.endpoint }}"></label></td>
+      </tr>
+      <tr>
+        <td><label>Sampling count<br>
+          <input type="number" min="0" name="sampling_count" value="{{ cfg.vision.sampling_count }}"></label></td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Dashboard <span class="muted">(restart dashboard to apply)</span></h2>
+    <table>
+      <tr>
+        <td><label>Port<br>
+          <input type="number" min="1" max="65535" name="dashboard_port" value="{{ cfg.dashboard.port }}"></label></td>
+      </tr>
+    </table>
+  </div>
+
+  <button type="submit">Save settings</button>
+</form>
+{% endblock %}

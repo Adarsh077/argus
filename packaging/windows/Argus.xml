@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-16"?>
+<!--
+  UNTESTED: authored without access to a Windows machine. Verify on real
+  Windows before relying on it; the schtasks/PowerShell one-liners below
+  are the documented, more-likely-to-work path and are what
+  `argus service install` runs on Windows.
+
+  Task Scheduler definition for "Argus": starts at user logon, restarts on
+  failure, runs whether the user is logged on or not is intentionally NOT
+  set (RunOnlyIfLoggedOn semantics apply naturally since capture needs an
+  interactive desktop session for screen/window/camera access) — this task
+  runs in the interactive session at logon.
+
+  Import with:
+    schtasks /Create /TN "Argus" /XML "Argus.xml" /F
+-->
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Argus - always-on activity tracker (starts at logon, restarts on crash)</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Priority>7</Priority>
+    <!-- Restart-on-crash: Task Scheduler restarts the task itself up to
+         RestartCount times, RestartInterval apart, when the task's action
+         (our long-running "argus run" process) exits/terminates. -->
+    <RestartOnFailure>
+      <Interval>PT1M</Interval>
+      <Count>999</Count>
+    </RestartOnFailure>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <!-- packaging replaces this with the installed pythonw.exe / argus.exe
+           path; placeholder below matches a `uv`/venv dev install. -->
+      <Command>%LOCALAPPDATA%\Argus\venv\Scripts\pythonw.exe</Command>
+      <Arguments>-m argus.cli run</Arguments>
+    </Exec>
+  </Actions>
+</Task>
