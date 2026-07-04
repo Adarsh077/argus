@@ -94,6 +94,42 @@ jobs:
           f=$(ls "$GITHUB_WORKSPACE"/packaging/arch/*.pkg.tar.zst | head -1)
           gh release upload "${{ needs.release.outputs.tag }}" "$f" --clobber
 
+  publish-aur:
+    # Push the updated PKGBUILD/.SRCINFO to the AUR (package: argus-tracker)
+    # after a release is cut. The AUR builds from the GitHub release tarball
+    # this pipeline just tagged, so this must run after `release`. It does
+    # NOT depend on linux-build — AUR builds the package itself on users'
+    # machines; we only publish the recipe.
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+
+      - name: Stage AUR package files
+        # The deploy action publishes the PKGBUILD's directory. Copy the
+        # shared post-install messages file next to it (PKGBUILD has
+        # install=argus.install) so it ships to the AUR too.
+        run: cp packaging/arch/argus.install packaging/aur/argus.install
+
+      - name: Publish to AUR
+        uses: KSXGitHub/github-actions-deploy-aur@v4.1.1
+        with:
+          pkgname: argus-tracker
+          pkgbuild: ./packaging/aur/PKGBUILD
+          assets: |
+            ./packaging/aur/argus.install
+          commit_username: github-actions
+          commit_email: actions@users.noreply.github.com
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "release ${{ needs.release.outputs.version }}"
+          # Recompute the tarball sha256 from the freshly published GitHub
+          # release, then regenerate .SRCINFO from the updated PKGBUILD.
+          updpkgsums: true
+
   windows-build:
     needs: release
     if: needs.release.outputs.released == 'true'

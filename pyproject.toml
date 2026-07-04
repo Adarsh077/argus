@@ -63,6 +63,10 @@ version_toml = ["pyproject.toml:project.version"]
 version_variables = [
     "packaging/arch/PKGBUILD:pkgver",
     "packaging/arch/.SRCINFO:pkgver",
+    # AUR-published PKGBUILD (packaging/aur/) — its checksum + .SRCINFO are
+    # regenerated in CI (publish-aur job), but pkgver is stamped here in
+    # lockstep with the rest.
+    "packaging/aur/PKGBUILD:pkgver",
 ]
 
 [tool.semantic_release.branches.main]

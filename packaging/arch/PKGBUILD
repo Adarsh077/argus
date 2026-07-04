@@ -163,6 +163,16 @@ EOF
   sed -i 's#^ExecStart=.*#ExecStart=/usr/bin/argus run#' \
     "$pkgdir/usr/lib/systemd/user/argus.service"
 
+  # Globally enable the user unit for every user's graphical session at
+  # install time — ship the enablement symlink `systemctl --user enable`
+  # would make, in the package-owned /usr/lib tree (pacman hooks can't run
+  # `systemctl --user`). systemd reads <unit-dir>/<target>.wants/ for user
+  # units, so argus.service auto-starts on the next graphical login for all
+  # users with no per-user step.
+  install -dm755 "$pkgdir/usr/lib/systemd/user/graphical-session.target.wants"
+  ln -s ../argus.service \
+    "$pkgdir/usr/lib/systemd/user/graphical-session.target.wants/argus.service"
+
   # Tray autostart (XDG autostart dir — starts the tray icon at login for
   # every graphical session, independent of the systemd user unit above).
   install -Dm644 "$srcdir/argus-tray.desktop" \

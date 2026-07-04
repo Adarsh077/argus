@@ -135,6 +135,10 @@ def start_linux() -> int:
     if shutil.which("systemctl") is None:
         print("systemctl not found — cannot start the service.")
         return 1
+    # Reload first so a freshly package-installed unit (dropped under
+    # /usr/lib/systemd/user by pacman, which can't run `systemctl --user`)
+    # is visible to the running user manager. Idempotent + cheap.
+    _run_systemctl("daemon-reload", check=False)
     # Don't gate on the ~/.config unit path: a package install ships the
     # unit under /usr/lib/systemd/user, so let systemctl resolve it and
     # surface "unit not found" itself.
