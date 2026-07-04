@@ -131,6 +131,37 @@ def uninstall_linux() -> int:
     return 0
 
 
+def start_linux() -> int:
+    if shutil.which("systemctl") is None:
+        print("systemctl not found — cannot start the service.")
+        return 1
+    # Don't gate on the ~/.config unit path: a package install ships the
+    # unit under /usr/lib/systemd/user, so let systemctl resolve it and
+    # surface "unit not found" itself.
+    result = _run_systemctl("start", SERVICE_NAME, check=False)
+    if result.returncode != 0:
+        msg = result.stderr.strip() or result.stdout.strip()
+        print(msg or f"failed to start {SERVICE_NAME} (is it installed?)")
+        return result.returncode
+    state = subprocess.run(
+        ["systemctl", "--user", "is-active", SERVICE_NAME], capture_output=True, text=True
+    )
+    print(f"Started {SERVICE_NAME}: {state.stdout.strip() or state.stderr.strip()}")
+    return 0
+
+
+def stop_linux() -> int:
+    if shutil.which("systemctl") is None:
+        print("systemctl not found — cannot stop the service.")
+        return 1
+    result = _run_systemctl("stop", SERVICE_NAME, check=False)
+    if result.returncode != 0:
+        print(result.stderr.strip() or result.stdout.strip())
+        return result.returncode
+    print(f"Stopped {SERVICE_NAME}")
+    return 0
+
+
 def status_linux() -> int:
     unit_path = _unit_path()
     print(f"Unit file: {unit_path} ({'present' if unit_path.exists() else 'not installed'})")
@@ -230,6 +261,22 @@ def status_windows() -> int:
     return result.returncode if result.returncode else 0
 
 
+def start_windows() -> int:
+    result = subprocess.run(
+        ["schtasks", "/Run", "/TN", TASK_NAME], capture_output=True, text=True
+    )
+    print(result.stdout or result.stderr)
+    return result.returncode
+
+
+def stop_windows() -> int:
+    result = subprocess.run(
+        ["schtasks", "/End", "/TN", TASK_NAME], capture_output=True, text=True
+    )
+    print(result.stdout or result.stderr)
+    return result.returncode
+
+
 # ------------------------------------------------------------------
 # Dispatch
 # ------------------------------------------------------------------
@@ -262,4 +309,24 @@ def status() -> int:
     if system == "Windows":
         return status_windows()
     print(f"argus service status: unsupported platform {system!r}")
+    return 1
+
+
+def start() -> int:
+    system = platform.system()
+    if system == "Linux":
+        return start_linux()
+    if system == "Windows":
+        return start_windows()
+    print(f"argus service start: unsupported platform {system!r}")
+    return 1
+
+
+def stop() -> int:
+    system = platform.system()
+    if system == "Linux":
+        return stop_linux()
+    if system == "Windows":
+        return stop_windows()
+    print(f"argus service stop: unsupported platform {system!r}")
     return 1

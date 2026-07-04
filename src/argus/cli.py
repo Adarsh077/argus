@@ -250,8 +250,16 @@ def cmd_service_status(args: argparse.Namespace) -> int:
     return service_mod.status()
 
 
+def cmd_service_start(args: argparse.Namespace) -> int:
+    return service_mod.start()
+
+
+def cmd_service_stop(args: argparse.Namespace) -> int:
+    return service_mod.stop()
+
+
 def cmd_service(args: argparse.Namespace) -> int:
-    print("usage: argus service {install|uninstall|status}")
+    print("usage: argus service {install|uninstall|start|stop|status}")
     return 1
 
 
@@ -339,7 +347,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_purge.set_defaults(func=cmd_purge)
 
-    p_service = sub.add_parser("service", help="Install/uninstall/status for the always-on background service")
+    p_service = sub.add_parser("service", help="Install/uninstall/start/stop/status for the always-on background service")
     p_service.set_defaults(func=cmd_service)
     service_sub = p_service.add_subparsers(dest="service_command")
 
@@ -352,6 +360,16 @@ def build_parser() -> argparse.ArgumentParser:
         "uninstall", help="Stop + disable + remove the always-on service"
     )
     p_service_uninstall.set_defaults(func=cmd_service_uninstall)
+
+    p_service_start = service_sub.add_parser(
+        "start", help="Start the installed always-on service (systemctl --user start / schtasks /Run)"
+    )
+    p_service_start.set_defaults(func=cmd_service_start)
+
+    p_service_stop = service_sub.add_parser(
+        "stop", help="Stop the running always-on service (systemctl --user stop / schtasks /End)"
+    )
+    p_service_stop.set_defaults(func=cmd_service_stop)
 
     p_service_status = service_sub.add_parser(
         "status", help="Show whether the always-on service is installed and running"
