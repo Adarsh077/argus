@@ -34,7 +34,7 @@
 # once one exists.
 
 pkgname=argus
-pkgver=0.1.0
+pkgver=0.2.0
 pkgrel=1
 pkgdesc="Always-on personal desktop activity tracker (KDE Plasma / Wayland)"
 arch=('x86_64')
